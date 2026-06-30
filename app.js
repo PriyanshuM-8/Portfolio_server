@@ -5,6 +5,7 @@ import projectRoutes from './routes/projects.js';
 import serviceRoutes from './routes/services.js';
 import contactRoutes from './routes/contact.js';
 import skillRoutes from './routes/skills.js';
+import geminiRoutes from './routes/gemini.js';
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/skills', skillRoutes);
+app.use('/api/gemini', geminiRoutes);
 
 app.get('/', (req, res) => {
   res.send('Portfolio API is running...');
