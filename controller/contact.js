@@ -13,6 +13,11 @@ export const sendContactEmail = async (req, res) => {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
+
+      connectionTimeout: 10000, // 10 seconds to establish connection
+      greetingTimeout: 10000,   // 10 seconds to receive SMTP greeting
+      socketTimeout: 10000,     // 10 seconds of inactivity
+
     });
 
     // verify connection before sending
