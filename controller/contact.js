@@ -22,7 +22,7 @@ export const sendContactEmail = async (req, res) => {
     });
 
     // verify connection before sending
-    await transporter.verify();
+    // await transporter.verify();
 
     await transporter.sendMail({
       from: `"Portfolio Contact" <${process.env.EMAIL_USER}>`,
