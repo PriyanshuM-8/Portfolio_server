@@ -9,14 +9,29 @@ export const sendContactEmail = async (req, res) => {
     });
   }
 
+  const host = process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com";
+  const port = Number(process.env.BREVO_SMTP_PORT) || 587;
+  const user = process.env.BREVO_SMTP_USER;
+  const pass = process.env.BREVO_SMTP_PASS;
+  const emailFrom = (process.env.EMAIL_FROM || "priyanshumaddeshiya72@gmail.com").replace(/<|>/g, "").trim();
+  const emailTo = (process.env.EMAIL_TO || "maddeshiyapriyanshu2@gmail.com").replace(/<|>/g, "").trim();
+
+  if (!user || !pass) {
+    console.error("Email configuration error: BREVO_SMTP_USER or BREVO_SMTP_PASS is not set in environment variables.");
+    return res.status(500).json({
+      error: "Server email credentials missing.",
+      detail: "BREVO_SMTP_USER or BREVO_SMTP_PASS environment variable is missing on server.",
+    });
+  }
+
   try {
     const transporter = nodemailer.createTransport({
-      host: process.env.BREVO_SMTP_HOST,
-      port: Number(process.env.BREVO_SMTP_PORT),
-      secure: false,
+      host,
+      port,
+      secure: false, // true for 465, false for other ports like 587 / 2525
       auth: {
-        user: process.env.BREVO_SMTP_USER,
-        pass: process.env.BREVO_SMTP_PASS,
+        user,
+        pass,
       },
       connectionTimeout: 20000,
       greetingTimeout: 20000,
@@ -24,8 +39,8 @@ export const sendContactEmail = async (req, res) => {
     });
 
     await transporter.sendMail({
-      from: `"Portfolio Contact" <${process.env.EMAIL_FROM}>`,
-      to: process.env.EMAIL_TO,
+      from: `"Portfolio Contact" <${emailFrom}>`,
+      to: emailTo,
       replyTo: email,
       subject: `New Message from ${name}`,
 
@@ -78,8 +93,8 @@ export const sendContactEmail = async (req, res) => {
 
     return res.status(500).json({
       error: "Failed to send email.",
-      detail: error.message,
-      code: error.code,
+      detail: error.message || "Internal server error during email dispatch.",
+      code: error.code || "EUNKNOWN",
     });
   }
 };
