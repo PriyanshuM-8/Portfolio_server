@@ -1,5 +1,49 @@
 import nodemailer from "nodemailer";
 
+export const verifyEmailService = async () => {
+  const apiKey = process.env.BREVO_API_KEY || process.env.BREVO_SMTP_PASS;
+  if (!apiKey) {
+    console.log("❌ [EMAIL SERVICE] Missing BREVO_API_KEY / BREVO_SMTP_PASS in environment variables.");
+    return;
+  }
+
+  // 1. Verify Brevo REST API Key
+  try {
+    const res = await fetch("https://api.brevo.com/v3/account", {
+      headers: { "api-key": apiKey, "accept": "application/json" }
+    });
+    const data = await res.json();
+    if (res.ok) {
+      console.log(`✅ [EMAIL SERVICE] Brevo API Connected & Ready! (Account: ${data.email || 'Active'})`);
+      return;
+    } else {
+      console.log(`⚠️ [EMAIL SERVICE] Brevo API Check: ${data.message || data.code}`);
+    }
+  } catch (err) {
+    console.log(`⚠️ [EMAIL SERVICE] Brevo API Network Check Failed: ${err.message}`);
+  }
+
+  // 2. Verify Nodemailer SMTP Transporter
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com",
+      port: Number(process.env.BREVO_SMTP_PORT) || 587,
+      secure: false,
+      auth: {
+        user: process.env.BREVO_SMTP_USER || "b437b1001@smtp-brevo.com",
+        pass: apiKey,
+      },
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 10000,
+    });
+
+    await transporter.verify();
+    console.log("✅ [EMAIL SERVICE] Nodemailer SMTP Transporter Connected & Ready!");
+  } catch (err) {
+    console.log(`❌ [EMAIL SERVICE] Email Transporter Connection Error: ${err.message}`);
+  }
+};
+
 export const sendContactEmail = async (req, res) => {
   const { name, email, message } = req.body;
 
