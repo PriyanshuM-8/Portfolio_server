@@ -1,21 +1,44 @@
 import nodemailer from "nodemailer";
 
 export const verifyEmailService = async () => {
-  const user = process.env.EMAIL_USER || "priyanshupm9@gmail.com";
-  const pass = process.env.EMAIL_PASS || "vxwsafhtzyxshrkv";
+  const brevoHost = process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com";
+  const brevoPort = Number(process.env.BREVO_SMTP_PORT) || 587;
+  const brevoUser = process.env.BREVO_SMTP_USER || "b437b1001@smtp-brevo.com";
+  const brevoPass = process.env.BREVO_SMTP_PASS;
 
+  if (brevoUser && brevoPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: brevoHost,
+        port: brevoPort,
+        secure: false,
+        auth: { user: brevoUser, pass: brevoPass },
+        family: 4,
+        tls: { rejectUnauthorized: false },
+      });
+      await transporter.verify();
+      console.log(`✅ [EMAIL SERVICE] Brevo SMTP Connected & Ready! (${brevoUser})`);
+      return;
+    } catch (err) {
+      console.log(`⚠️ [EMAIL SERVICE] Brevo SMTP Check Warning: ${err.message}`);
+    }
+  }
+
+  // Fallback check: Gmail Transporter
+  const gmailUser = process.env.EMAIL_USER || "priyanshupm9@gmail.com";
+  const gmailPass = process.env.EMAIL_PASS || "vxwsafhtzyxshrkv";
   try {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
       secure: true,
-      auth: { user, pass },
-      family: 4, // Force IPv4 to fix Render ENETUNREACH IPv6 error
+      auth: { user: gmailUser, pass: gmailPass },
+      family: 4,
     });
     await transporter.verify();
-    console.log(`✅ [EMAIL SERVICE] Gmail Transporter Connected & Ready! (${user})`);
+    console.log(`✅ [EMAIL SERVICE] Gmail Transporter Connected & Ready! (${gmailUser})`);
   } catch (err) {
-    console.log(`❌ [EMAIL SERVICE] Email Transporter Error: ${err.message}`);
+    console.log(`❌ [EMAIL SERVICE] Email Transporter Connection Error: ${err.message}`);
   }
 };
 
@@ -28,8 +51,11 @@ export const sendContactEmail = async (req, res) => {
     });
   }
 
-  const emailUser = process.env.EMAIL_USER || "priyanshupm9@gmail.com";
-  const emailPass = process.env.EMAIL_PASS || "vxwsafhtzyxshrkv";
+  const brevoHost = process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com";
+  const brevoPort = Number(process.env.BREVO_SMTP_PORT) || 587;
+  const brevoUser = process.env.BREVO_SMTP_USER || "b437b1001@smtp-brevo.com";
+  const brevoPass = process.env.BREVO_SMTP_PASS;
+  const emailFrom = (process.env.EMAIL_FROM || "priyanshumaddeshiya72@gmail.com").replace(/<|>/g, "").trim();
   const emailTo = (process.env.EMAIL_TO || "maddeshiyapriyanshu2@gmail.com").replace(/<|>/g, "").trim();
 
   const htmlContent = `
@@ -49,30 +75,89 @@ export const sendContactEmail = async (req, res) => {
     </div>
   `;
 
+  // 1. Primary: Try Brevo SMTP
+  if (brevoUser && brevoPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: brevoHost,
+        port: brevoPort,
+        secure: false,
+        auth: { user: brevoUser, pass: brevoPass },
+        family: 4,
+        tls: { rejectUnauthorized: false },
+      });
+
+      await transporter.sendMail({
+        from: `"Portfolio Contact" <${emailFrom}>`,
+        to: emailTo,
+        replyTo: email,
+        subject: `New Message from ${name}`,
+        html: htmlContent,
+      });
+
+      console.log(`Email sent successfully via Brevo SMTP to ${emailTo}`);
+      return res.status(200).json({ message: "Email sent successfully." });
+    } catch (brevoErr) {
+      console.warn("Brevo SMTP failed, attempting Brevo REST API / Gmail fallback...", brevoErr.message);
+    }
+  }
+
+  // 2. Secondary: Try Brevo REST API v3
+  const apiKey = process.env.BREVO_API_KEY || brevoPass;
+  if (apiKey) {
+    try {
+      const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "api-key": apiKey,
+        },
+        body: JSON.stringify({
+          sender: { name: "Portfolio Contact", email: emailFrom },
+          to: [{ email: emailTo }],
+          replyTo: { email: email, name: name },
+          subject: `New Message from ${name}`,
+          htmlContent,
+        }),
+      });
+
+      const brevoData = await brevoRes.json();
+      if (brevoRes.ok) {
+        console.log("Email sent successfully via Brevo REST API!");
+        return res.status(200).json({ message: "Email sent successfully." });
+      }
+      console.warn("Brevo REST API warning:", brevoData);
+    } catch (apiErr) {
+      console.warn("Brevo REST API failed:", apiErr.message);
+    }
+  }
+
+  // 3. Fallback: Gmail Nodemailer (ensures zero email failure)
+  const gmailUser = process.env.EMAIL_USER || "priyanshupm9@gmail.com";
+  const gmailPass = process.env.EMAIL_PASS || "vxwsafhtzyxshrkv";
+
   try {
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
       secure: true,
-      auth: {
-        user: emailUser,
-        pass: emailPass,
-      },
-      family: 4, // Force IPv4 to fix Render ENETUNREACH IPv6 error
+      auth: { user: gmailUser, pass: gmailPass },
+      family: 4,
     });
 
     await transporter.sendMail({
-      from: `"Portfolio Contact" <${emailUser}>`,
+      from: `"Portfolio Contact" <${gmailUser}>`,
       to: emailTo,
       replyTo: email,
       subject: `New Message from ${name}`,
       html: htmlContent,
     });
 
-    console.log(`Email sent successfully via Gmail to ${emailTo}`);
+    console.log(`Email sent successfully via Gmail fallback to ${emailTo}`);
     return res.status(200).json({ message: "Email sent successfully." });
   } catch (error) {
-    console.error("Gmail error:", error.message);
+    console.error("All email dispatch methods failed:", error.message);
     return res.status(500).json({
       error: "Failed to send email.",
       detail: error.message || "Internal server error during email dispatch.",
