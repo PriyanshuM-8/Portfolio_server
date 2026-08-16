@@ -1,46 +1,18 @@
 import nodemailer from "nodemailer";
 
 export const verifyEmailService = async () => {
-  const apiKey = process.env.BREVO_API_KEY || process.env.BREVO_SMTP_PASS;
-  if (!apiKey) {
-    console.log("❌ [EMAIL SERVICE] Missing BREVO_API_KEY / BREVO_SMTP_PASS in environment variables.");
-    return;
-  }
+  const user = process.env.EMAIL_USER || "priyanshupm9@gmail.com";
+  const pass = process.env.EMAIL_PASS || "vxwsafhtzyxshrkv";
 
-  // 1. Verify Brevo REST API Key
-  try {
-    const res = await fetch("https://api.brevo.com/v3/account", {
-      headers: { "api-key": apiKey, "accept": "application/json" }
-    });
-    const data = await res.json();
-    if (res.ok) {
-      console.log(`✅ [EMAIL SERVICE] Brevo API Connected & Ready! (Account: ${data.email || 'Active'})`);
-      return;
-    } else {
-      console.log(`⚠️ [EMAIL SERVICE] Brevo API Check: ${data.message || data.code}`);
-    }
-  } catch (err) {
-    console.log(`⚠️ [EMAIL SERVICE] Brevo API Network Check Failed: ${err.message}`);
-  }
-
-  // 2. Verify Nodemailer SMTP Transporter
   try {
     const transporter = nodemailer.createTransport({
-      host: process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com",
-      port: Number(process.env.BREVO_SMTP_PORT) || 587,
-      secure: false,
-      auth: {
-        user: process.env.BREVO_SMTP_USER || "b437b1001@smtp-brevo.com",
-        pass: apiKey,
-      },
-      tls: { rejectUnauthorized: false },
-      connectionTimeout: 10000,
+      service: "gmail",
+      auth: { user, pass },
     });
-
     await transporter.verify();
-    console.log("✅ [EMAIL SERVICE] Nodemailer SMTP Transporter Connected & Ready!");
+    console.log(`✅ [EMAIL SERVICE] Gmail Transporter Connected & Ready! (${user})`);
   } catch (err) {
-    console.log(`❌ [EMAIL SERVICE] Email Transporter Connection Error: ${err.message}`);
+    console.log(`❌ [EMAIL SERVICE] Email Transporter Error: ${err.message}`);
   }
 };
 
@@ -53,19 +25,10 @@ export const sendContactEmail = async (req, res) => {
     });
   }
 
-  const apiKey = process.env.BREVO_API_KEY || process.env.BREVO_SMTP_PASS;
-  const emailFrom = (process.env.EMAIL_FROM || "priyanshumaddeshiya72@gmail.com").replace(/<|>/g, "").trim();
+  const emailUser = process.env.EMAIL_USER || "priyanshupm9@gmail.com";
+  const emailPass = process.env.EMAIL_PASS || "vxwsafhtzyxshrkv";
   const emailTo = (process.env.EMAIL_TO || "maddeshiyapriyanshu2@gmail.com").replace(/<|>/g, "").trim();
 
-  if (!apiKey) {
-    console.error("Email error: BREVO_API_KEY / BREVO_SMTP_PASS is not set.");
-    return res.status(500).json({
-      error: "Server email credentials missing.",
-      detail: "BREVO_API_KEY or BREVO_SMTP_PASS is missing in Render environment variables.",
-    });
-  }
-
-  // HTML template
   const htmlContent = `
     <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
       <div style="background:#c98826;padding:20px 24px">
@@ -83,70 +46,30 @@ export const sendContactEmail = async (req, res) => {
     </div>
   `;
 
-  // Method 1: Try Brevo REST API v3 (bypasses SMTP IP restrictions & port blocks on Render)
   try {
-    const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "api-key": apiKey,
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: emailUser,
+        pass: emailPass,
       },
-      body: JSON.stringify({
-        sender: { name: "Portfolio Contact", email: emailFrom },
-        to: [{ email: emailTo }],
-        replyTo: { email: email, name: name },
-        subject: `New Message from ${name}`,
-        htmlContent,
-      }),
     });
 
-    const brevoData = await brevoRes.json();
+    await transporter.sendMail({
+      from: `"Portfolio Contact" <${emailUser}>`,
+      to: emailTo,
+      replyTo: email,
+      subject: `New Message from ${name}`,
+      html: htmlContent,
+    });
 
-    if (brevoRes.ok) {
-      console.log("Email sent successfully via Brevo API:", brevoData);
-      return res.status(200).json({ message: "Email sent successfully." });
-    }
-
-    console.warn("Brevo API warning response:", brevoData);
-    throw new Error(brevoData.message || brevoData.code || "Brevo API call failed");
-  } catch (apiError) {
-    console.error("Brevo API failed, trying Nodemailer SMTP fallback:", apiError.message);
-
-    // Method 2: Fallback to Nodemailer SMTP
-    try {
-      const transporter = nodemailer.createTransport({
-        host: process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com",
-        port: Number(process.env.BREVO_SMTP_PORT) || 587,
-        secure: false,
-        auth: {
-          user: process.env.BREVO_SMTP_USER || "b437b1001@smtp-brevo.com",
-          pass: apiKey,
-        },
-        tls: {
-          rejectUnauthorized: false,
-        },
-        connectionTimeout: 15000,
-      });
-
-      await transporter.sendMail({
-        from: `"Portfolio Contact" <${emailFrom}>`,
-        to: emailTo,
-        replyTo: email,
-        subject: `New Message from ${name}`,
-        html: htmlContent,
-      });
-
-      return res.status(200).json({ message: "Email sent successfully." });
-    } catch (smtpError) {
-      console.error("SMTP error code:", smtpError.code);
-      console.error("SMTP error message:", smtpError.message);
-
-      return res.status(500).json({
-        error: "Failed to send email.",
-        detail: apiError.message || smtpError.message || "Internal server error during email dispatch.",
-        code: smtpError.code || "EAUTH",
-      });
-    }
+    console.log(`Email sent successfully via Gmail to ${emailTo}`);
+    return res.status(200).json({ message: "Email sent successfully." });
+  } catch (error) {
+    console.error("Gmail error:", error.message);
+    return res.status(500).json({
+      error: "Failed to send email.",
+      detail: error.message || "Internal server error during email dispatch.",
+    });
   }
 };
