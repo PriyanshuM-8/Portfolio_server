@@ -6,8 +6,11 @@ export const verifyEmailService = async () => {
 
   try {
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
       auth: { user, pass },
+      family: 4, // Force IPv4 to fix Render ENETUNREACH IPv6 error
     });
     await transporter.verify();
     console.log(`✅ [EMAIL SERVICE] Gmail Transporter Connected & Ready! (${user})`);
@@ -48,11 +51,14 @@ export const sendContactEmail = async (req, res) => {
 
   try {
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
       auth: {
         user: emailUser,
         pass: emailPass,
       },
+      family: 4, // Force IPv4 to fix Render ENETUNREACH IPv6 error
     });
 
     await transporter.sendMail({
