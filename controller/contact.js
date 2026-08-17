@@ -1,9 +1,25 @@
 import nodemailer from "nodemailer";
 
+// Helper function to escape HTML special characters and prevent email HTML injection
+const escapeHtml = (str = "") => {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
+// Validate email format
+const isValidEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 export const verifyEmailService = async () => {
   const brevoHost = process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com";
   const brevoPort = Number(process.env.BREVO_SMTP_PORT) || 587;
-  const brevoUser = process.env.BREVO_SMTP_USER || "b437b1001@smtp-brevo.com";
+  const brevoUser = process.env.BREVO_SMTP_USER;
   const brevoPass = process.env.BREVO_SMTP_PASS;
 
   if (brevoUser && brevoPass) {
@@ -17,7 +33,7 @@ export const verifyEmailService = async () => {
         tls: { rejectUnauthorized: false },
       });
       await transporter.verify();
-      console.log(`✅ [EMAIL SERVICE] Brevo SMTP Connected & Ready! (${brevoUser})`);
+      console.log(`✅ [EMAIL SERVICE] Brevo SMTP Connected & Ready!`);
       return;
     } catch (err) {
       console.log(`⚠️ [EMAIL SERVICE] Brevo SMTP Check Warning: ${err.message}`);
@@ -25,38 +41,48 @@ export const verifyEmailService = async () => {
   }
 
   // Fallback check: Gmail Transporter
-  const gmailUser = process.env.EMAIL_USER || "priyanshupm9@gmail.com";
-  const gmailPass = process.env.EMAIL_PASS || "vxwsafhtzyxshrkv";
-  try {
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: { user: gmailUser, pass: gmailPass },
-      family: 4,
-    });
-    await transporter.verify();
-    console.log(`✅ [EMAIL SERVICE] Gmail Transporter Connected & Ready! (${gmailUser})`);
-  } catch (err) {
-    console.log(`❌ [EMAIL SERVICE] Email Transporter Connection Error: ${err.message}`);
+  const gmailUser = process.env.EMAIL_USER;
+  const gmailPass = process.env.EMAIL_PASS;
+  if (gmailUser && gmailPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: { user: gmailUser, pass: gmailPass },
+        family: 4,
+      });
+      await transporter.verify();
+      console.log(`✅ [EMAIL SERVICE] Gmail Transporter Connected & Ready!`);
+    } catch (err) {
+      console.log(`❌ [EMAIL SERVICE] Gmail Transporter Connection Error: ${err.message}`);
+    }
   }
 };
 
 export const sendContactEmail = async (req, res) => {
-  const { name, email, message } = req.body;
+  const name = req.body.name?.trim();
+  const email = req.body.email?.trim();
+  const message = req.body.message?.trim();
 
   if (!name || !email || !message) {
-    return res.status(400).json({
-      error: "All fields are required.",
-    });
+    return res.status(400).json({ error: "All fields are required." });
+  }
+
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: "Please provide a valid email address." });
   }
 
   const brevoHost = process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com";
   const brevoPort = Number(process.env.BREVO_SMTP_PORT) || 587;
-  const brevoUser = process.env.BREVO_SMTP_USER || "b437b1001@smtp-brevo.com";
+  const brevoUser = process.env.BREVO_SMTP_USER;
   const brevoPass = process.env.BREVO_SMTP_PASS;
-  const emailFrom = (process.env.EMAIL_FROM || "priyanshumaddeshiya72@gmail.com").replace(/<|>/g, "").trim();
-  const emailTo = (process.env.EMAIL_TO || "maddeshiyapriyanshu2@gmail.com").replace(/<|>/g, "").trim();
+  const emailFrom = (process.env.EMAIL_FROM || "").replace(/<|>/g, "").trim();
+  const emailTo = (process.env.EMAIL_TO || "").replace(/<|>/g, "").trim();
+
+  const safeName = escapeHtml(name);
+  const safeEmail = escapeHtml(email);
+  const safeMessage = escapeHtml(message);
 
   const htmlContent = `
     <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
@@ -64,10 +90,10 @@ export const sendContactEmail = async (req, res) => {
         <h2 style="color:#000;margin:0;font-size:18px">New Portfolio Message</h2>
       </div>
       <div style="padding:24px">
-        <p style="margin:0 0 12px"><b>Name:</b> ${name}</p>
-        <p style="margin:0 0 12px"><b>Email:</b> <a href="mailto:${email}">${email}</a></p>
+        <p style="margin:0 0 12px"><b>Name:</b> ${safeName}</p>
+        <p style="margin:0 0 12px"><b>Email:</b> <a href="mailto:${safeEmail}">${safeEmail}</a></p>
         <p style="margin:0 0 8px"><b>Message:</b></p>
-        <p style="background:#f8fafc;padding:12px;border-radius:6px;margin:0;white-space:pre-wrap">${message}</p>
+        <p style="background:#f8fafc;padding:12px;border-radius:6px;margin:0;white-space:pre-wrap">${safeMessage}</p>
       </div>
       <div style="background:#f1f5f9;padding:12px 24px;font-size:12px;color:#64748b">
         Sent from your portfolio contact form
@@ -76,7 +102,7 @@ export const sendContactEmail = async (req, res) => {
   `;
 
   // 1. Primary: Try Brevo SMTP
-  if (brevoUser && brevoPass) {
+  if (brevoUser && brevoPass && emailFrom && emailTo) {
     try {
       const transporter = nodemailer.createTransport({
         host: brevoHost,
@@ -91,7 +117,7 @@ export const sendContactEmail = async (req, res) => {
         from: `"Portfolio Contact" <${emailFrom}>`,
         to: emailTo,
         replyTo: email,
-        subject: `New Message from ${name}`,
+        subject: `New Message from ${safeName}`,
         html: htmlContent,
       });
 
@@ -104,7 +130,7 @@ export const sendContactEmail = async (req, res) => {
 
   // 2. Secondary: Try Brevo REST API v3
   const apiKey = process.env.BREVO_API_KEY || brevoPass;
-  if (apiKey) {
+  if (apiKey && emailFrom && emailTo) {
     try {
       const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
@@ -117,7 +143,7 @@ export const sendContactEmail = async (req, res) => {
           sender: { name: "Portfolio Contact", email: emailFrom },
           to: [{ email: emailTo }],
           replyTo: { email: email, name: name },
-          subject: `New Message from ${name}`,
+          subject: `New Message from ${safeName}`,
           htmlContent,
         }),
       });
@@ -133,34 +159,37 @@ export const sendContactEmail = async (req, res) => {
     }
   }
 
-  // 3. Fallback: Gmail Nodemailer (ensures zero email failure)
-  const gmailUser = process.env.EMAIL_USER || "priyanshupm9@gmail.com";
-  const gmailPass = process.env.EMAIL_PASS || "vxwsafhtzyxshrkv";
+  // 3. Fallback: Gmail Nodemailer
+  const gmailUser = process.env.EMAIL_USER;
+  const gmailPass = process.env.EMAIL_PASS;
 
-  try {
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: { user: gmailUser, pass: gmailPass },
-      family: 4,
-    });
+  if (gmailUser && gmailPass && emailTo) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: { user: gmailUser, pass: gmailPass },
+        family: 4,
+      });
 
-    await transporter.sendMail({
-      from: `"Portfolio Contact" <${gmailUser}>`,
-      to: emailTo,
-      replyTo: email,
-      subject: `New Message from ${name}`,
-      html: htmlContent,
-    });
+      await transporter.sendMail({
+        from: `"Portfolio Contact" <${gmailUser}>`,
+        to: emailTo,
+        replyTo: email,
+        subject: `New Message from ${safeName}`,
+        html: htmlContent,
+      });
 
-    console.log(`Email sent successfully via Gmail fallback to ${emailTo}`);
-    return res.status(200).json({ message: "Email sent successfully." });
-  } catch (error) {
-    console.error("All email dispatch methods failed:", error.message);
-    return res.status(500).json({
-      error: "Failed to send email.",
-      detail: error.message || "Internal server error during email dispatch.",
-    });
+      console.log(`Email sent successfully via Gmail fallback to ${emailTo}`);
+      return res.status(200).json({ message: "Email sent successfully." });
+    } catch (error) {
+      console.error("Gmail dispatch failed:", error.message);
+    }
   }
+
+  console.error("All email dispatch methods failed or credentials missing.");
+  return res.status(500).json({
+    error: "Failed to send email. Please check server email configurations.",
+  });
 };
